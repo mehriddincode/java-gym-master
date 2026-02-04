@@ -2,63 +2,60 @@ package ru.yandex.practicum.gym;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
+import java.util.NavigableMap;
+import java.util.TreeMap;
 
 public class Timetable {
 
-    private Map<DayOfWeek, List<TrainingSession>> sessions = new HashMap<>();
+    private final Map<DayOfWeek, NavigableMap<TimeOfDay, List<TrainingSession>>> sessions = new HashMap<>();
 
     public void addNewTrainingSession(TrainingSession trainingSession) {
         DayOfWeek day = trainingSession.getDayOfWeek();
-        sessions.putIfAbsent(day, new ArrayList<>());
-        List<TrainingSession> daySessions = sessions.get(day);
+        TimeOfDay time = trainingSession.getTimeOfDay();
 
-        int index = Collections.binarySearch(daySessions, trainingSession, Comparator.comparing(TrainingSession::getTimeOfDay));
-        if (index < 0) {
-            index = -(index + 1);
-        }
-        daySessions.add(index, trainingSession);
+        sessions.putIfAbsent(day, new TreeMap<>());
+        NavigableMap<TimeOfDay, List<TrainingSession>> daySessions = sessions.get(day);
+
+        daySessions.putIfAbsent(time, new ArrayList<>());
+        daySessions.get(time).add(trainingSession);
     }
 
     public List<TrainingSession> getTrainingSessionsForDay(DayOfWeek dayOfWeek) {
-        return sessions.getOrDefault(dayOfWeek, new ArrayList<>());
+        NavigableMap<TimeOfDay, List<TrainingSession>> daySessions = sessions.get(dayOfWeek);
+        if (daySessions == null) {
+            return Collections.emptyList();
+        }
+
+        List<TrainingSession> result = new ArrayList<>();
+        for (List<TrainingSession> timeSlots : daySessions.values()) {
+            result.addAll(timeSlots);
+        }
+        return Collections.unmodifiableList(result);
     }
 
     public List<TrainingSession> getTrainingSessionsForDayAndTime(DayOfWeek dayOfWeek, TimeOfDay timeOfDay) {
-        List<TrainingSession> daySessions = sessions.get(dayOfWeek);
+        NavigableMap<TimeOfDay, List<TrainingSession>> daySessions = sessions.get(dayOfWeek);
         if (daySessions == null) {
-            return new ArrayList<>();
+            return Collections.emptyList();
         }
 
-        TrainingSession searchKey = new TrainingSession(null, null, null, timeOfDay);
-        int index = Collections.binarySearch(daySessions, searchKey, Comparator.comparing(TrainingSession::getTimeOfDay));
-
-        if (index < 0) {
-            return new ArrayList<>();
+        List<TrainingSession> timeSessions = daySessions.get(timeOfDay);
+        if (timeSessions == null) {
+            return Collections.emptyList();
         }
-
-        int start = index;
-        while (start > 0 && daySessions.get(start - 1).getTimeOfDay().equals(timeOfDay)) {
-            start--;
-        }
-
-        int end = index;
-        while (end < daySessions.size() - 1 && daySessions.get(end + 1).getTimeOfDay().equals(timeOfDay)) {
-            end++;
-        }
-
-        return new ArrayList<>(daySessions.subList(start, end + 1));
+        return Collections.unmodifiableList(timeSessions);
     }
 
     public List<CounterOfTrainings> getCountByCoaches() {
         Map<Coach, Long> counts = new HashMap<>();
-        for (List<TrainingSession> daySessions : sessions.values()) {
-            for (TrainingSession session : daySessions) {
-                counts.merge(session.getCoach(), 1L, Long::sum);
+        for (NavigableMap<TimeOfDay, List<TrainingSession>> daySessions : sessions.values()) {
+            for (List<TrainingSession> timeSlots : daySessions.values()) {
+                for (TrainingSession session : timeSlots) {
+                    counts.merge(session.getCoach(), 1L, Long::sum);
+                }
             }
         }
 
